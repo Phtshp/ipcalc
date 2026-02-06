@@ -1,321 +1,85 @@
-/* IP-калькулятор (только IPv4) — обновлён: расширенные настройки и битовая форма маски */
-(() => {
-  const el = id => document.getElementById(id);
-  const input = el('input');
-  const calcBtn = el('calcBtn');
-  const clearBtn = el('clearBtn');
-  const errorEl = el('error');
-  const resultSection = el('result');
-  const copyBtn = el('copyBtn');
+:root{
+  --bg:#f6f8fa;
+  --card:#ffffff;
+  --accent:#2b6cb0;
+  --muted:#6b7280;
+  --danger:#d9534f;
+  --radius:10px;
+  font-family: Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  color:#0f1724;
+}
 
-  const advToggle = el('advToggle');
-  const advanced = el('advanced');
-  const hostIndexInput = el('hostIndex');
-  const hostFindBtn = el('hostFind');
-  const hostError = el('hostError');
-  const hostResult = el('hostResult');
-  const rHost = el('r-host');
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:linear-gradient(180deg,#eef2f6 0%,var(--bg) 100%);
+  min-height:100vh;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:40px 16px;
+}
 
-  function showError(msg){
-    errorEl.textContent = msg || '';
-  }
+.container{
+  width:100%;
+  max-width:860px;
+}
 
-  function ipToInt(ip){
-    const parts = ip.trim().split('.');
-    if(parts.length !== 4) return null;
-    const nums = parts.map(p => {
-      if(!/^\d+$/.test(p)) return NaN;
-      const n = Number(p);
-      return (n >= 0 && n <= 255) ? n : NaN;
-    });
-    if(nums.some(n => Number.isNaN(n))) return null;
-    return ((nums[0]<<24)>>>0) + ((nums[1]<<16)>>>0) + ((nums[2]<<8)>>>0) + (nums[3]>>>0);
-  }
+h1{margin:0 0 8px}
+.lead{margin:0 0 18px;color:var(--muted)}
 
-  function intToIp(i){
-    i = i >>> 0;
-    return [(i>>>24)&255, (i>>>16)&255, (i>>>8)&255, i&255].join('.');
-  }
+.card{
+  background:var(--card);
+  border-radius:var(--radius);
+  padding:18px;
+  box-shadow:0 6px 18px rgba(15,23,36,0.06);
+  margin-bottom:16px;
+}
 
-  function maskFromPrefix(prefix){
-    if(prefix < 0 || prefix > 32) return null;
-    return (prefix === 0) ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
-  }
+label{display:block;margin-bottom:6px;font-weight:600}
+input#input, input#hostIndex{
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid #e6e9ee;
+  font-size:15px;
+}
 
-  function prefixFromMaskStr(maskStr){
-    const mInt = ipToInt(maskStr);
-    if(mInt === null) return null;
-    // count ones
-    let count = 0;
-    for(let i=0;i<32;i++){
-      if((mInt & (1 << (31 - i))) !== 0) count++;
-    }
-    const rebuilt = maskFromPrefix(count);
-    if(rebuilt !== mInt) return null;
-    return count;
-  }
+.controls{margin-top:10px; display:flex; gap:8px; align-items:center;}
+button{
+  background:var(--accent);
+  color:white;
+  border:none;
+  padding:8px 12px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+}
+button.muted{
+  background:#eef2f6;
+  color:var(--muted);
+}
+button:active{transform:translateY(1px)}
+.error{color:var(--danger); margin-top:8px}
 
-  function toBinaryStr(i){
-    return intToIp(i).split('.').map(o => ('00000000' + parseInt(o).toString(2)).slice(-8)).join('.');
-  }
+.result-table{width:100%; border-collapse:collapse; margin-top:6px}
+.result-table th{ text-align:left; padding:8px 6px; width:30%; color:var(--muted)}
+.result-table td{ padding:8px 6px; font-family:monospace }
 
-  function toBitsCompact(i){
-    // 32 символа без точек
-    return ((i>>>0).toString(2)).padStart(32, '0');
-  }
+.binary{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;font-family:monospace}
 
-  function parseInput(s){
-    s = s.trim();
-    if(!s) return null;
-    if(s.includes('/')){
-      const [ipStr, prefixStr] = s.split('/');
-      const ipInt = ipToInt(ipStr);
-      const prefix = Number(prefixStr);
-      if(ipInt === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
-      return {ipInt, prefix};
-    } else if(s.includes(' ')){
-      const [ipStr, maskStr] = s.split(/\s+/);
-      const ipInt = ipToInt(ipStr);
-      const prefix = prefixFromMaskStr(maskStr);
-      if(ipInt === null || prefix === null) return null;
-      return {ipInt, prefix};
-    } else {
-      const ipInt = ipToInt(s);
-      if(ipInt === null) return null;
-      return {ipInt, prefix:32};
-    }
-  }
+.hidden{display:none}
+.small{font-size:13px}
+.muted{color:var(--muted)}
 
-  function calc(ipInt, prefix){
-    const mask = maskFromPrefix(prefix);
-    const network = (ipInt & mask) >>> 0;
-    const wildcard = (~mask) >>> 0;
-    const broadcast = (network | wildcard) >>> 0;
-    const total = (prefix === 32) ? 1 : Math.pow(2, 32 - prefix);
-    let usable, first, last;
-    if(prefix === 32){
-      usable = 1;
-      first = ipInt;
-      last = ipInt;
-    } else if(prefix === 31){
-      usable = 2;
-      first = network;
-      last = broadcast;
-    } else {
-      usable = total >= 2 ? total - 2 : 0;
-      first = (network + 1) >>> 0;
-      last = (broadcast - 1) >>> 0;
-    }
-
-    return {
-      ip: intToIp(ipInt),
-      network: intToIp(network),
-      broadcast: intToIp(broadcast),
-      prefix,
-      netmask: intToIp(mask),
-      maskBits: toBitsCompact(mask),
-      wildcard: intToIp(wildcard),
-      total,
-      usable,
-      firstInt: first >>> 0,
-      lastInt: last >>> 0,
-      first: usable > 0 ? intToIp(first) : '-',
-      last: usable > 0 ? intToIp(last) : '-',
-      bin: {
-        ip: toBinaryStr(ipInt),
-        netmask: toBinaryStr(mask),
-        network: toBinaryStr(network),
-        broadcast: toBinaryStr(broadcast)
-      }
-    };
-  }
-
-  function render(res){
-    el('r-ip').textContent = res.ip;
-    el('r-network').textContent = res.network;
-    el('r-broadcast').textContent = res.broadcast;
-    el('r-prefix').textContent = '/' + res.prefix;
-    el('r-netmask').textContent = res.netmask;
-    el('r-maskbits').textContent = res.maskBits;
-    el('r-wildcard').textContent = res.wildcard;
-    el('r-total').textContent = res.total.toLocaleString();
-    el('r-usable').textContent = res.usable.toLocaleString();
-    el('r-first').textContent = res.first;
-    el('r-last').textContent = res.last;
-    el('b-ip').textContent = res.bin.ip;
-    el('b-netmask').textContent = res.bin.netmask;
-    el('b-network').textContent = res.bin.network;
-    el('b-broadcast').textContent = res.bin.broadcast;
-
-    resultSection.classList.remove('hidden');
-  }
-
-  function copyResults(){
-    const rows = [
-      ['IP', el('r-ip').textContent],
-      ['Network', el('r-network').textContent],
-      ['Broadcast', el('r-broadcast').textContent],
-      ['Prefix', el('r-prefix').textContent],
-      ['Netmask', el('r-netmask').textContent],
-      ['Mask bits', el('r-maskbits').textContent],
-      ['Wildcard', el('r-wildcard').textContent],
-      ['Total', el('r-total').textContent],
-      ['Usable', el('r-usable').textContent],
-      ['First', el('r-first').textContent],
-      ['Last', el('r-last').textContent],
-      ['Requested host', rHost.textContent || '-'],
-      ['Binary IP', el('b-ip').textContent],
-      ['Binary Netmask', el('b-netmask').textContent]
-    ];
-    const txt = rows.map(r => `${r[0]}:\t${r[1]}`).join('\n');
-    navigator.clipboard?.writeText(txt).then(() => {
-      copyBtn.textContent = 'Скопировано!';
-      setTimeout(()=> copyBtn.textContent = 'Копировать результаты', 1400);
-    }).catch(() => {
-      copyBtn.textContent = 'Не удалось скопировать';
-      setTimeout(()=> copyBtn.textContent = 'Копировать результаты', 1800);
-    });
-  }
-
-  /////////////////////////
-  // Advanced: parse ordinal input (число или русское слово)
-  function parseHostSelector(s){
-    if(!s) return null;
-    s = s.trim().toLowerCase();
-    // allow digits
-    if(/^-?\d+$/.test(s)){
-      return {type:'index', index: Number(s)}; // negative allowed to count from end if user wants
-    }
-    // map common russian ordinals
-    const map = {
-      'первый':1, 'первая':1, 'первых':1,
-      'второй':2, 'вторая':2,
-      'третий':3, 'третья':3,
-      'четвёртый':4, 'четвертый':4, 'четвтая':4,
-      'пятый':5,
-      'шестой':6,
-      'седьмой':7,
-      'восьмой':8,
-      'девятый':9,
-      'десятый':10,
-      'последний':'last', 'последняя':'last', 'посл': 'last'
-    };
-    // try exact
-    if(map.hasOwnProperty(s)) {
-      return (map[s] === 'last') ? {type:'last'} : {type:'index', index: map[s]};
-    }
-    // try words with trailing punctuation
-    const cleaned = s.replace(/[^\p{L}\d]+/gu, '');
-    if(map.hasOwnProperty(cleaned)){
-      return (map[cleaned] === 'last') ? {type:'last'} : {type:'index', index: map[cleaned]};
-    }
-    return null;
-  }
-
-  function computeRequestedHost(res, selector){
-    // res has firstInt, lastInt, usable, prefix
-    if(!selector) return {addr:'-', note:'Не указан индекс'};
-    if(res.usable === 0){
-      return {addr:'-', note:'В сети нет usable адресов'};
-    }
-    if(selector.type === 'last'){
-      return {addr: intToIp(res.lastInt), note:'последний usable'};
-    }
-    // index: positive => from first usable (1 = first), negative => from last (-1 = last)
-    let idx = selector.index;
-    if(!Number.isInteger(idx)) return {addr:'-', note:'Неверный индекс'};
-    if(idx === 0) return {addr:'-', note:'Индекс начинается с 1 (или используйте "последний")'};
-
-    // handle prefix 32 and 31 explicitly: for /32 first==last==ip, usable==1; for /31 usable==2 and endpoints are network and broadcast
-    const first = res.firstInt;
-    const last = res.lastInt;
-
-    if(idx > 0){
-      const target = (first + (idx - 1)) >>> 0;
-      if(target > last) return {addr:'-', note:'Индекс выходит за пределы usable адресов'};
-      return {addr: intToIp(target), note:`#${idx} от первого usable`};
-    } else { // negative
-      const target = (last + (idx + 1)) >>> 0; // idx negative: -1 -> last, -2 -> last-1
-      if(target < first) return {addr:'-', note:'Индекс выходит за пределы usable адресов'};
-      return {addr: intToIp(target), note:`#${-idx} от последнего usable`};
-    }
-  }
-
-  /////////////////////////
-  // Events
-  calcBtn.addEventListener('click', () => {
-    showError('');
-    hostError.textContent = '';
-    hostResult.classList.add('hidden');
-    rHost.textContent = '-';
-
-    const parsed = parseInput(input.value);
-    if(!parsed){
-      showError('Неверный ввод. Используйте 192.168.1.10/24 или 192.168.1.10 255.255.255.0');
-      resultSection.classList.add('hidden');
-      return;
-    }
-    const res = calc(parsed.ipInt, parsed.prefix);
-    render(res);
-  });
-
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    hostIndexInput.value = '';
-    showError('');
-    hostError.textContent = '';
-    rHost.textContent = '-';
-    hostResult.classList.add('hidden');
-    resultSection.classList.add('hidden');
-  });
-
-  // Advanced toggle
-  advToggle.addEventListener('click', () => {
-    const expanded = advToggle.getAttribute('aria-expanded') === 'true';
-    advToggle.setAttribute('aria-expanded', String(!expanded));
-    advToggle.textContent = expanded ? 'Расширенные настройки ▾' : 'Расширенные настройки ▴';
-    advanced.classList.toggle('hidden');
-    advanced.setAttribute('aria-hidden', String(expanded));
-  });
-
-  // Find host in advanced
-  hostFindBtn.addEventListener('click', () => {
-    hostError.textContent = '';
-    hostResult.classList.add('hidden');
-    rHost.textContent = '-';
-
-    const parsed = parseInput(input.value);
-    if(!parsed){
-      hostError.textContent = 'Сначала выполните расчёт сети (введите IP и нажмите Рассчитать).';
-      return;
-    }
-    const res = calc(parsed.ipInt, parsed.prefix);
-
-    const selector = parseHostSelector(hostIndexInput.value || '');
-    if(!selector){
-      hostError.textContent = 'Неверный ввод индекса хоста. Можно ввести цифру (1, 2...) или слова "первый", "второй", "последний".';
-      return;
-    }
-
-    const found = computeRequestedHost(res, selector);
-    if(found.addr === '-'){
-      hostError.textContent = found.note || 'Не удалось найти хост';
-      rHost.textContent = '-';
-      hostResult.classList.remove('hidden');
-      return;
-    }
-    rHost.textContent = `${found.addr} (${found.note})`;
-    hostResult.classList.remove('hidden');
-  });
-
-  copyBtn.addEventListener('click', copyResults);
-
-  // Enter key triggers calc in main input; in hostIndex triggers hostFind
-  input.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') calcBtn.click();
-  });
-  hostIndexInput.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') hostFindBtn.click();
-  });
-
-})();
+/* Advanced panel */
+.advanced{
+  margin-top:12px;
+  padding:12px;
+  border-radius:8px;
+  background:linear-gradient(180deg,#fbfdff,#ffffff);
+  border:1px solid #eef2f6;
+}
+.adv-row{display:flex; gap:8px; align-items:center; margin-top:8px}
+.adv-row input{flex:1}
+.adv-result{margin-top:8px}
