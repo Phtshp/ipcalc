@@ -20,13 +20,32 @@ body.gradient{
   background-size: 800% 800%;
 }
 body.colorGradient{
-  --fg:#fff; --panel:rgba(0,0,0,0.2); --border:rgba(255,255,255,0.2); --accent:#ffcc00;
-  animation: colorGradientBG 20s linear infinite;
-  background: linear-gradient(270deg, red, orange, yellow, green, cyan, blue, violet);
-  background-size: 800% 800%;
+  --fg:#fff;
+  --panel:rgba(0,0,0,0.2);
+  --border:rgba(255,255,255,0.2);
+  --accent:#ffcc00;
+
+  background: linear-gradient(
+    270deg,
+    red    0%,
+    red    14%,
+    orange 28%,
+    yellow 42%,
+    green  56%,
+    cyan   70%,
+    blue   84%,
+    violet 100%
+  );
+
+  background-size: 800% 100%;
+  animation: colorGradientBG 35s linear infinite;
 }
 @keyframes gradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-@keyframes colorGradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+@keyframes colorGradientBG {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+
 body{ background:var(--bg); color:var(--fg); font-family:Arial,sans-serif; margin:16px; transition: background 0.5s, color 0.5s;}
 label{display:block;margin-top:10px;font-weight:600}
 input,select,button{ background:var(--panel); color:var(--fg); border:1px solid var(--border); padding:6px; font:inherit; }
