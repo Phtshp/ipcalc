@@ -17,8 +17,21 @@
       <div class="controls">
         <button id="calcBtn">Рассчитать</button>
         <button id="clearBtn" class="muted">Очистить</button>
+        <button id="advToggle" class="muted" aria-expanded="false">Расширенные настройки ▾</button>
       </div>
       <div id="error" class="error" role="alert" aria-live="assertive"></div>
+
+      <div id="advanced" class="advanced hidden" aria-hidden="true">
+        <h3>Расширенные настройки</h3>
+        <p class="muted small">Укажите нужный хост в подсети: можно ввести номер (например <code>1</code>, <code>2</code>, <code>3</code>), русские порядковые слова (<code>первый</code>, <code>второй</code>, <code>третий</code>) или <code>последний</code>.</p>
+        <div class="adv-row">
+          <label for="hostIndex">Номер хоста (1 = первый usable)</label>
+          <input id="hostIndex" placeholder="1, 2, 3, первы́й, последний" />
+          <button id="hostFind" class="muted">Найти</button>
+        </div>
+        <div id="hostError" class="error small" aria-live="assertive"></div>
+        <div id="hostResult" class="adv-result muted small hidden">Запрошенный хост: <span id="r-host">-</span></div>
+      </div>
     </div>
 
     <section id="result" class="card hidden" aria-live="polite">
@@ -30,11 +43,12 @@
           <tr><th>Broadcast</th><td id="r-broadcast"></td></tr>
           <tr><th>Префикс</th><td id="r-prefix"></td></tr>
           <tr><th>Маска</th><td id="r-netmask"></td></tr>
+          <tr><th>Битовая форма маски</th><td id="r-maskbits"></td></tr>
           <tr><th>Wildcard</th><td id="r-wildcard"></td></tr>
           <tr><th>Всего адресов</th><td id="r-total"></td></tr>
           <tr><th>Доступных (usable)</th><td id="r-usable"></td></tr>
           <tr><th>Первый usable</th><td id="r-first"></td></tr>
-          <tr><th>Последний usable</th><td id="r-last"></td></tr>
+          <tr><th>Пос��едний usable</th><td id="r-last"></td></tr>
         </tbody>
       </table>
 
@@ -59,291 +73,3 @@ Broad:   <span id="b-broadcast"></span>
   <script src="assets/app.js"></script>
 </body>
 </html>
-```
-
-```css name=assets/style.css
-:root{
-  --bg:#f6f8fa;
-  --card:#ffffff;
-  --accent:#2b6cb0;
-  --muted:#6b7280;
-  --danger:#d9534f;
-  --radius:10px;
-  font-family: Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
-  color:#0f1724;
-}
-
-*{box-sizing:border-box}
-body{
-  margin:0;
-  background:linear-gradient(180deg,#eef2f6 0%,var(--bg) 100%);
-  min-height:100vh;
-  display:flex;
-  align-items:flex-start;
-  justify-content:center;
-  padding:40px 16px;
-}
-
-.container{
-  width:100%;
-  max-width:860px;
-}
-
-h1{margin:0 0 8px}
-.lead{margin:0 0 18px;color:var(--muted)}
-
-.card{
-  background:var(--card);
-  border-radius:var(--radius);
-  padding:18px;
-  box-shadow:0 6px 18px rgba(15,23,36,0.06);
-  margin-bottom:16px;
-}
-
-label{display:block;margin-bottom:6px;font-weight:600}
-input#input{
-  width:100%;
-  padding:10px 12px;
-  border-radius:8px;
-  border:1px solid #e6e9ee;
-  font-size:15px;
-}
-
-.controls{margin-top:10px; display:flex; gap:8px;}
-button{
-  background:var(--accent);
-  color:white;
-  border:none;
-  padding:8px 12px;
-  border-radius:8px;
-  cursor:pointer;
-  font-weight:600;
-}
-button.muted{
-  background:#eef2f6;
-  color:var(--muted);
-}
-button:active{transform:translateY(1px)}
-.error{color:var(--danger); margin-top:8px}
-
-.result-table{width:100%; border-collapse:collapse; margin-top:6px}
-.result-table th{ text-align:left; padding:8px 6px; width:30%; color:var(--muted)}
-.result-table td{ padding:8px 6px; font-family:monospace }
-
-.binary{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;font-family:monospace}
-
-.hidden{display:none}
-.small{font-size:13px}
-.muted{color:var(--muted)}
-```
-
-```javascript name=assets/app.js
-/* IP-калькулятор (только IPv4) */
-(() => {
-  const el = id => document.getElementById(id);
-  const input = el('input');
-  const calcBtn = el('calcBtn');
-  const clearBtn = el('clearBtn');
-  const errorEl = el('error');
-  const resultSection = el('result');
-  const copyBtn = el('copyBtn');
-
-  function showError(msg){
-    errorEl.textContent = msg || '';
-  }
-
-  function ipToInt(ip){
-    const parts = ip.trim().split('.');
-    if(parts.length !== 4) return null;
-    const nums = parts.map(p => {
-      if(!/^\d+$/.test(p)) return NaN;
-      const n = Number(p);
-      return (n >= 0 && n <= 255) ? n : NaN;
-    });
-    if(nums.some(n => Number.isNaN(n))) return null;
-    return ((nums[0]<<24)>>>0) + ((nums[1]<<16)>>>0) + ((nums[2]<<8)>>>0) + (nums[3]>>>0);
-  }
-
-  function intToIp(i){
-    i = i >>> 0;
-    return [(i>>>24)&255, (i>>>16)&255, (i>>>8)&255, i&255].join('.');
-  }
-
-  function maskFromPrefix(prefix){
-    if(prefix < 0 || prefix > 32) return null;
-    return (prefix === 0) ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
-  }
-
-  function prefixFromMaskStr(maskStr){
-    const mInt = ipToInt(maskStr);
-    if(mInt === null) return null;
-    // check contiguous ones
-    let inv = (~mInt) >>> 0;
-    // Count ones in mInt
-    let count = 0;
-    for(let i=0;i<32;i++){
-      if((mInt & (1 << (31 - i))) !== 0) count++;
-    }
-    // Validate contiguity: mask should be like ones then zeros
-    const rebuilt = maskFromPrefix(count);
-    if(rebuilt !== mInt) return null;
-    return count;
-  }
-
-  function toBinaryStr(i){
-    return intToIp(i).split('.').map(o => ('00000000' + parseInt(o).toString(2)).slice(-8)).join('.');
-  }
-
-  function parseInput(s){
-    s = s.trim();
-    if(!s) return null;
-    if(s.includes('/')){
-      const [ipStr, prefixStr] = s.split('/');
-      const ipInt = ipToInt(ipStr);
-      const prefix = Number(prefixStr);
-      if(ipInt === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
-      return {ipInt, prefix};
-    } else if(s.includes(' ')){
-      const [ipStr, maskStr] = s.split(/\s+/);
-      const ipInt = ipToInt(ipStr);
-      const prefix = prefixFromMaskStr(maskStr);
-      if(ipInt === null || prefix === null) return null;
-      return {ipInt, prefix};
-    } else {
-      const ipInt = ipToInt(s);
-      if(ipInt === null) return null;
-      return {ipInt, prefix:32};
-    }
-  }
-
-  function calc(ipInt, prefix){
-    const mask = maskFromPrefix(prefix);
-    const network = (ipInt & mask) >>> 0;
-    const wildcard = (~mask) >>> 0;
-    const broadcast = (network | wildcard) >>> 0;
-    const total = (prefix === 32) ? 1 : Math.pow(2, 32 - prefix);
-    let usable, first, last;
-    if(prefix === 32){
-      usable = 1;
-      first = ipInt;
-      last = ipInt;
-    } else if(prefix === 31){
-      usable = 2;
-      first = network;
-      last = broadcast;
-    } else {
-      usable = total >= 2 ? total - 2 : 0;
-      first = (network + 1) >>> 0;
-      last = (broadcast - 1) >>> 0;
-    }
-
-    return {
-      ip: intToIp(ipInt),
-      network: intToIp(network),
-      broadcast: intToIp(broadcast),
-      prefix,
-      netmask: intToIp(mask),
-      wildcard: intToIp(wildcard),
-      total,
-      usable,
-      first: usable > 0 ? intToIp(first) : '-',
-      last: usable > 0 ? intToIp(last) : '-',
-      bin: {
-        ip: toBinaryStr(ipInt),
-        netmask: toBinaryStr(mask),
-        network: toBinaryStr(network),
-        broadcast: toBinaryStr(broadcast)
-      }
-    };
-  }
-
-  function render(res){
-    el('r-ip').textContent = res.ip;
-    el('r-network').textContent = res.network;
-    el('r-broadcast').textContent = res.broadcast;
-    el('r-prefix').textContent = '/' + res.prefix;
-    el('r-netmask').textContent = res.netmask;
-    el('r-wildcard').textContent = res.wildcard;
-    el('r-total').textContent = res.total.toLocaleString();
-    el('r-usable').textContent = res.usable.toLocaleString();
-    el('r-first').textContent = res.first;
-    el('r-last').textContent = res.last;
-    el('b-ip').textContent = res.bin.ip;
-    el('b-netmask').textContent = res.bin.netmask;
-    el('b-network').textContent = res.bin.network;
-    el('b-broadcast').textContent = res.bin.broadcast;
-
-    resultSection.classList.remove('hidden');
-  }
-
-  function copyResults(){
-    const rows = [
-      ['IP', el('r-ip').textContent],
-      ['Network', el('r-network').textContent],
-      ['Broadcast', el('r-broadcast').textContent],
-      ['Prefix', el('r-prefix').textContent],
-      ['Netmask', el('r-netmask').textContent],
-      ['Wildcard', el('r-wildcard').textContent],
-      ['Total', el('r-total').textContent],
-      ['Usable', el('r-usable').textContent],
-      ['First', el('r-first').textContent],
-      ['Last', el('r-last').textContent],
-      ['Binary IP', el('b-ip').textContent],
-      ['Binary Netmask', el('b-netmask').textContent]
-    ];
-    const txt = rows.map(r => `${r[0]}:\t${r[1]}`).join('\n');
-    navigator.clipboard?.writeText(txt).then(() => {
-      copyBtn.textContent = 'Скопировано!';
-      setTimeout(()=> copyBtn.textContent = 'Копировать результаты', 1400);
-    }).catch(() => {
-      copyBtn.textContent = 'Не удалось скопировать';
-      setTimeout(()=> copyBtn.textContent = 'Копировать результаты', 1800);
-    });
-  }
-
-  calcBtn.addEventListener('click', () => {
-    showError('');
-    const parsed = parseInput(input.value);
-    if(!parsed){
-      showError('Неверный ввод. Используйте 192.168.1.10/24 или 192.168.1.10 255.255.255.0');
-      resultSection.classList.add('hidden');
-      return;
-    }
-    const res = calc(parsed.ipInt, parsed.prefix);
-    render(res);
-  });
-
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    showError('');
-    resultSection.classList.add('hidden');
-  });
-
-  copyBtn.addEventListener('click', copyResults);
-
-  // Enter key
-  input.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') calcBtn.click();
-  });
-
-})();
-```
-
-````markdown name=README.md
-# IP-калькулятор для GitHub Pages
-
-Это простой статический сайт (HTML + CSS + JS) для расчёта параметров IPv4-сетей: сеть, broadcast, маска, wildcard, первый/последний хост, количество адресов и бинарные представления.
-
-Как развернуть на GitHub Pages:
-1. Создайте новый публичный репозиторий на GitHub.
-2. Поместите файлы из этого набора в корень репозитория (index.html и папку assets).
-3. Запушьте на ветку `main` (или `gh-pages`, если предпочитаете).
-4. В настройках репозитория (Settings → Pages) выберите публикацию из ветки `main` (root) или `gh-pages`.
-5. Подождите несколько минут — сайт будет доступен по адресу вида `https://<ваш-логин>.github.io/<repo>`.
-
-Полезная документация: [GitHub Pages](https://docs.github.com/en/pages)
-
-Если хочешь, могу:
-- добавить поддержку IPv6,
-- сделать темную/светлую тему с переключателем,
-- подготовить workflow GitHub Actions, который автоматически деплоит на ветку `gh-pages`.
