@@ -21,24 +21,25 @@ body.gradient{
 }
 body.colorGradient{
   --fg:#fff;
-  --panel:rgba(0,0,0,0.2);
-  --border:rgba(255,255,255,0.2);
+  --panel:rgba(0,0,0,0.25);
+  --border:rgba(255,255,255,0.25);
   --accent:#ffcc00;
 
   background: linear-gradient(
     270deg,
-    red    0%,
-    red    14%,
-    orange 28%,
-    yellow 42%,
-    green  56%,
-    cyan   70%,
-    blue   84%,
-    violet 100%
+    hsl(0,   70%, 55%),
+    hsl(30,  70%, 55%),
+    hsl(60,  70%, 55%),
+    hsl(120, 70%, 55%),
+    hsl(180, 70%, 55%),
+    hsl(210, 70%, 55%),
+    hsl(270, 70%, 55%),
+    hsl(330, 70%, 55%),
+    hsl(360, 70%, 55%)
   );
 
-  background-size: 800% 100%;
-  animation: colorGradientBG 45s linear infinite;
+  background-size: 200% 100%;
+  animation: colorGradientBG 15s linear infinite;
 }
 @keyframes gradientBG { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
 @keyframes colorGradientBG {
@@ -225,7 +226,12 @@ function calcVLSM(){
   let tbody=vlsmTable.querySelector('tbody'); tbody.innerHTML='';
   let prefixes=[], reqHosts=[];
   if(mode.value==='vlsm'){
-    reqHosts=vlsmHosts.value.split(',').map(x=>+x.trim()).filter(x=>x>0).sort((a,b)=>b-a);
+    reqHosts = vlsmHosts.value
+  .trim()
+  .split(/[,\s]+/)   // ← запятая ИЛИ пробел (один или несколько)
+  .map(x => parseInt(x,10))
+  .filter(x => Number.isFinite(x) && x > 0)
+  .sort((a,b)=>b-a);
     prefixes=reqHosts.map(h=>32-Math.ceil(Math.log2(h+2)));
   } else if(mode.value==='flsmCount'){
     let n=+flsmCount.value; if(n<1){vlsmError.textContent='Введите количество подсетей'; return;}
